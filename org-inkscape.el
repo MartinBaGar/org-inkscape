@@ -1,8 +1,8 @@
 ;;; org-inkscape.el --- Inkscape integration for Org Mode -*- lexical-binding: t; -*-
 
-;; Version: 0.1.0
-;; Package-Requires: ((emacs "27.1") (org "9.3"))
-;; Keywords: org inkscape diagrams svg
+;; Version: 0.2.0
+;; Package-Requires: ((emacs "27.1"))
+;; Keywords: multimedia inkscape diagrams svg
 
 ;;; Commentary:
 
@@ -19,10 +19,8 @@
 ;;   C-c i r  force refresh previews
 ;;   C-c i n  create new diagram and insert link
 ;;
-;; Preview:
-;;   SVG files are displayed directly as previews — no export needed.
-;;   PNG export is available by setting org-inkscape-image-type to 'png,
-;;   using inkscape --export-type=png with org-inkscape-dpi for resolution.
+;; Preview is always exported with --export-area-drawing (cropped to content).
+;; SVG preview is a cropped copy of the source, PNG uses org-inkscape-dpi.
 
 ;;; Code:
 
@@ -50,9 +48,9 @@ Example: \"~/org/inkscape/\""
 
 (defcustom org-inkscape-image-type 'svg
   "Image format for exported previews.
-SVG uses the source file directly — no export needed.
-PNG uses inkscape CLI export with `org-inkscape-dpi'."
-  :type '(choice (const :tag "SVG (no export needed)" svg)
+Both formats are cropped to content via --export-area-drawing.
+PNG additionally uses `org-inkscape-dpi' for resolution."
+  :type '(choice (const :tag "SVG" svg)
           (const :tag "PNG" png))
   :group 'org-inkscape)
 
@@ -63,8 +61,7 @@ Has no effect when `org-inkscape-image-type' is svg."
   :group 'org-inkscape)
 
 (defcustom org-inkscape-image-suffix "-AUTO"
-  "Suffix for PNG preview files. diagram.svg -> diagram-AUTO.png
-Has no effect when `org-inkscape-image-type' is svg."
+  "Suffix for preview files. diagram.svg -> diagram-AUTO.svg or diagram-AUTO.png."
   :type 'string
   :group 'org-inkscape)
 
@@ -83,6 +80,7 @@ Has no effect when `org-inkscape-image-type' is svg."
 ;;; ============================================================
 
 (defun org-inkscape--log (msg &rest args)
+  "Update org-inkscape log by appending MSG and ARGS."
   (apply #'message (concat "[org-inkscape] " msg) args))
 
 (defun org-inkscape--resolve-path (path)
@@ -98,13 +96,12 @@ otherwise to the current org file's directory."
        default-directory)))
 
 (defun org-inkscape--image-path (abs-path)
-  "Return the PNG preview path for ABS-PATH.
-When image type is svg, the source file is its own preview."
-  (if (eq org-inkscape-image-type 'svg)
-      abs-path
-    (concat (file-name-sans-extension abs-path)
-            org-inkscape-image-suffix
-            ".png")))
+  "Return the preview file path for ABS-PATH.
+Always a separate -AUTO file so --export-area-drawing can crop it."
+  (concat (file-name-sans-extension abs-path)
+          org-inkscape-image-suffix
+          "."
+          (symbol-name org-inkscape-image-type)))
 
 
 ;;; ============================================================
@@ -112,12 +109,14 @@ When image type is svg, the source file is its own preview."
 ;;; ============================================================
 
 (defun org-inkscape--export (input)
-  "Export SVG file at INPUT to PNG. Returns image path on success, nil on failure."
+  "Export SVG at INPUT to a cropped preview using --export-area-drawing.
+Returns the preview path on success, nil on failure."
   (let* ((output (org-inkscape--image-path input))
          (cmd (concat "inkscape"
-                      " --export-type=png"
+                      " --export-type=" (symbol-name org-inkscape-image-type)
                       " --export-area-drawing"
-                      " --export-dpi=" (number-to-string org-inkscape-dpi)
+                      (when (eq org-inkscape-image-type 'png)
+                        (format " --export-dpi=%s" org-inkscape-dpi))
                       " --export-filename=" (shell-quote-argument output)
                       " " (shell-quote-argument input))))
     (org-inkscape--log "Exporting: %s" (file-name-nondirectory input))
@@ -128,16 +127,12 @@ When image type is svg, the source file is its own preview."
       nil)))
 
 (defun org-inkscape--get-image (abs-path)
-  "Return preview image for ABS-PATH.
-For SVG: returns the source file directly.
-For PNG: exports only if source is newer than existing preview."
-  (if (eq org-inkscape-image-type 'svg)
-      (and (file-exists-p abs-path) abs-path)
-    (let ((image-path (org-inkscape--image-path abs-path)))
-      (if (and (file-exists-p image-path)
-               (file-newer-than-file-p image-path abs-path))
-          image-path
-        (org-inkscape--export abs-path)))))
+  "Return preview image for ABS-PATH, exporting only if source is newer."
+  (let ((image-path (org-inkscape--image-path abs-path)))
+    (if (and (file-exists-p image-path)
+             (file-newer-than-file-p image-path abs-path))
+        image-path
+      (org-inkscape--export abs-path))))
 
 
 ;;; ============================================================
@@ -256,12 +251,11 @@ This is the :follow handler for inkscape links."
 (defun org-inkscape-refresh ()
   "Force re-export and refresh all inkscape previews in this buffer."
   (interactive)
-  (when (eq org-inkscape-image-type 'png)
-    (dolist (link (org-inkscape--get-links))
-      (let ((img (org-inkscape--image-path
-                  (org-inkscape--resolve-path
-                   (org-element-property :path link)))))
-        (when (file-exists-p img) (delete-file img)))))
+  (dolist (link (org-inkscape--get-links))
+    (let ((img (org-inkscape--image-path
+                (org-inkscape--resolve-path
+                 (org-element-property :path link)))))
+      (when (file-exists-p img) (delete-file img))))
   (org-inkscape--update-overlays)
   (org-inkscape--log "Previews refreshed"))
 

@@ -1,0 +1,42 @@
+* Inkscape Zen Mode Setup Guide
+This guide explains how to configure a minimalist Inkscape profile with a white background, no startup docks, and a compact UI that respects tiling window managers (like niri).
+
+** Create a Dedicated "Zen" Profile
+Isolate your Zen settings from your regular Inkscape configuration using environment variables.
+
+Bash
+#+begin_src sh
+cp -r ~/.config/inkscape ~/.config/inkscape-zen
+#+end_src
+From now on, launch your Zen version using:
+
+#+begin_src sh
+INKSCAPE_PROFILE_DIR=~/.config/inkscape-zen inkscape
+#+end_src
+** Create your template
+Launch your Zen profile.
+
+Press Shift + Ctrl + D to open Document Properties.
+
+Under the Display tab, click the color boxes for Page and Desk and set them to pure white (FFFFFFFF).
+
+Go to File > Save Template...
+** Prevent Docks from Opening at Startup
+Inkscape remembers open dialog tabs (like Objects;FillStroke;) and forces them open on launch. We will prevent that :
+
+Close Inkscape.
+
+Open ~/.config/inkscape-zen/dialogs-state-ex.ini.
+Save and close the file.
+** Lock In the "Zen" Geometry
+Prevent Inkscape from opening with random panel sizes or the wrong window dimensions.
+
+Open Inkscape and go to Edit > Preferences > Interface > Windows.
+
+Select Remember and use last window's geometry.
+
+Close the preferences window.
+
+Set up your ideal canvas: Press F11 (fullscreen), Shift + F11 (hide UI), and F12 (hide dialogs).
+
+Open Preferences one last time, change the setting to Don't save window geometry, and immediately close Inkscape.
